@@ -3,34 +3,30 @@ from PIL import Image
 from rembg import remove
 import os
 
-# Initialize Flask App
-application = Flask(__name__)
+app = Flask(__name__)
 
-# Define static directories
 UPLOAD_FOLDER = "static/uploads"
 BACKGROUND_FOLDER = "static/backgrounds"
 
-# Ensure directories exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(BACKGROUND_FOLDER, exist_ok=True)
 
-@application.route('/')
+@app.route('/')
 def index():
-    """Render the main page."""
     return render_template('index.html')
 
-@application.route('/get-backgrounds')
+@app.route('/get-backgrounds')
 def get_backgrounds():
     """Return a list of available background images."""
-    images = [img for img in os.listdir(BACKGROUND_FOLDER) if img.endswith(('.png', '.jpg', '.jpeg'))]
+    images = [img for img in os.listdir(BACKGROUND_FOLDER) if img.lower().endswith(('.png', '.jpg', '.jpeg'))]
     return jsonify(images)
 
-@application.route('/background/<filename>')
+@app.route('/background/<filename>')
 def serve_background(filename):
     """Serve background images from the directory."""
     return send_from_directory(BACKGROUND_FOLDER, filename)
 
-@application.route('/upload', methods=['POST'])
+@app.route('/upload', methods=['POST'])
 def upload():
     """Handle object image upload & remove background."""
     object_img = request.files.get("object")
@@ -39,10 +35,8 @@ def upload():
         input_img = Image.open(object_img).convert("RGBA")
         output_img = remove(input_img)  # Remove background
         output_img.save(obj_path, format="PNG")
-
         return jsonify({"object": f"/{obj_path}"})
-
     return jsonify({"error": "No file provided"}), 400
 
 if __name__ == '__main__':
-    application.run(debug=True, host='0.0.0.0', port=8080)
+    app.run(debug=True, host='0.0.0.0', port=8080)

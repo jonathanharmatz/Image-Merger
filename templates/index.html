@@ -22,9 +22,8 @@
             flex-direction: column;
             align-items: center;
             text-align: center;
-            width: 90%;
-            height: 100%;
-            max-width: 1000px;
+            width: 100%;
+            max-width: 400px; /* Optimized for mobile */
         }
 
         .upload-section {
@@ -48,46 +47,28 @@
             cursor: pointer;
             border-radius: 5px;
             text-align: center;
-            white-space: nowrap;
         }
 
         .dropdown {
             background-color: #f8f9fa;
             color: black;
-            padding: 8px;
             border: 1px solid #ccc;
             cursor: pointer;
         }
 
         .canvas-container {
-            display: block;
             position: relative;
             width: 300px;
             height: 450px;
-            /*display: flex;*/
-            align-items: center;
-            justify-content: center;
-            /*background-color: white;*/
+            background: white;
             border-radius: 5px;
             overflow: hidden;
         }
 
         canvas {
             width: 100%;
-            height: 900;
-            max-width: 1500px;
+            height: 100%;
             border: none;
-        }
-
-        .icon-container {
-            margin-top: 20px; /* Adjusted spacing */
-            display: flex;
-            justify-content: center;
-        }
-
-        .icon {
-            width: 60px; /* Adjust the size of the icon */
-            height: 60px;
         }
 
         .buttons {
@@ -105,7 +86,6 @@
             border: none;
             cursor: pointer;
             border-radius: 5px;
-            text-align: center;
         }
 
         .merge-btn { background-color: #28a745; }
@@ -117,12 +97,7 @@
     </style>
 </head>
 <body>
-    <div class="icon-container">
-        <img src="static/logo.png" alt="App Icon" class="icon">
-    </div>
-    <br>
     <div class="container">
-        <!-- Background Selector -->
         <div class="upload-section">
             <select id="backgroundSelect" class="dropdown" onchange="selectBackground()">
                 <option value="">Select a Background</option>
@@ -133,14 +108,12 @@
             </label>
         </div>
 
-        <!-- Canvas Container -->
         <div class="canvas-container">
             <canvas id="canvas" width="300" height="450"></canvas>
         </div>
 
-        <!-- Buttons Section -->
         <div class="buttons">
-            <button class="action-btn merge-btn" onclick="mergeImages()">Merge & Download</button>
+            <button class="action-btn merge-btn" onclick="mergeImages()">Merge & Save</button>
             <button class="action-btn clear-btn" onclick="clearCanvas()">Clear</button>
         </div>
     </div>
@@ -150,54 +123,25 @@
         let background = null;
         let objectImg = null;
 
-        function fetchBackgrounds() {
-            fetch('/get-backgrounds')
-                .then(response => response.json())
-                .then(images => {
-                    let select = document.getElementById("backgroundSelect");
-                    images.forEach(image => {
-                        let option = document.createElement("option");
-                        option.value = image;
-                        option.textContent = image;
-                        select.appendChild(option);
-                    });
-                });
-        }
-
         function selectBackground() {
             let filename = document.getElementById("backgroundSelect").value;
             if (!filename) return;
-
             let imageUrl = `/background/${filename}`;
 
             fabric.Image.fromURL(imageUrl, function(img) {
                 if (background) canvas.remove(background);
-
-                let scaleX = canvas.width / img.width;
-                let scaleY = canvas.height / img.height;
-                let scale = Math.max(scaleX, scaleY);
-
-                img.set({
-                    left: 0,
-                    top: 0,
-                    scaleX: 1,
-                    scaleY: 1,
-                    hasControls: false,
-                    selectable: false
-                });
-
+                let scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+                img.set({ left: 0, top: 0, scaleX: scale, scaleY: scale, hasControls: false, selectable: false });
                 canvas.add(img);
                 canvas.sendToBack(img);
                 background = img;
-            });
+            }, { crossOrigin: 'anonymous' });
         }
 
         function uploadObject() {
             let fileInput = document.getElementById('objectInput');
             let file = fileInput.files[0];
-
             if (!file) return;
-
             let formData = new FormData();
             formData.append("object", file);
 
@@ -206,7 +150,9 @@
                 .then(data => {
                     fabric.Image.fromURL(data.object, function(img) {
                         if (objectImg) canvas.remove(objectImg);
-                        img.set({ left: 110, top: 270, scaleX: 0.1, scaleY: 0.1, hasControls: true, selectable: true });
+                        img.scaleToWidth(canvas.width * 0.3);
+                        img.scaleToHeight(canvas.height * 0.3);
+                        img.set({ left: canvas.width * 0.35, top: canvas.height * 0.35, hasControls: true, selectable: true });
                         canvas.add(img);
                         objectImg = img;
                     });
@@ -214,7 +160,19 @@
         }
 
         function mergeImages() {
-            let mergedImage = canvas.toDataURL('image/png');
+            let scaleFactor = 2;
+            let tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width * scaleFactor;
+            tempCanvas.height = canvas.height * scaleFactor;
+            let tempCtx = tempCanvas.getContext('2d');
+            let tempFabricCanvas = new fabric.StaticCanvas(tempCanvas);
+            canvas.getObjects().forEach(obj => {
+                let cloned = fabric.util.object.clone(obj);
+                cloned.set({ left: obj.left * scaleFactor, top: obj.top * scaleFactor, scaleX: obj.scaleX * scaleFactor, scaleY: obj.scaleY * scaleFactor });
+                tempFabricCanvas.add(cloned);
+            });
+            tempFabricCanvas.renderAll();
+            let mergedImage = tempCanvas.toDataURL('image/png');
             let link = document.createElement('a');
             link.href = mergedImage;
             link.download = 'merged_image.png';
@@ -227,8 +185,19 @@
             objectImg = null;
         }
 
-
-        window.onload = fetchBackgrounds;
+        window.onload = function () {
+            fetch('/get-backgrounds')
+                .then(response => response.json())
+                .then(images => {
+                    let select = document.getElementById("backgroundSelect");
+                    images.forEach(image => {
+                        let option = document.createElement("option");
+                        option.value = image;
+                        option.textContent = image;
+                        select.appendChild(option);
+                    });
+                });
+        };
     </script>
 </body>
 </html>
