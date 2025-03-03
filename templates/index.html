@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Merger</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.2.4/fabric.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            width: 90%;
+            height: 100%;
+            max-width: 1000px;
+        }
+
+        .upload-section {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .upload-btn, .dropdown {
+            padding: 10px 15px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .dropdown {
+            background-color: #f8f9fa;
+            color: black;
+            padding: 8px;
+            border: 1px solid #ccc;
+            cursor: pointer;
+        }
+
+        .canvas-container {
+            display: block;
+            position: relative;
+            width: 300px;
+            height: 450px;
+            /*display: flex;*/
+            align-items: center;
+            justify-content: center;
+            /*background-color: white;*/
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        canvas {
+            width: 100%;
+            height: 900;
+            max-width: 1500px;
+            border: none;
+        }
+
+        .icon-container {
+            margin-top: 20px; /* Adjusted spacing */
+            display: flex;
+            justify-content: center;
+        }
+
+        .icon {
+            width: 60px; /* Adjust the size of the icon */
+            height: 60px;
+        }
+
+        .buttons {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .action-btn {
+            padding: 12px 15px;
+            font-size: 16px;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .merge-btn { background-color: #28a745; }
+        .merge-btn:hover { background-color: #218838; }
+
+        .clear-btn { background-color: #dc3545; }
+        .clear-btn:hover { background-color: #c82333; }
+
+    </style>
+</head>
+<body>
+    <div class="icon-container">
+        <img src="static/logo.png" alt="App Icon" class="icon">
+    </div>
+    <br>
+    <div class="container">
+        <!-- Background Selector -->
+        <div class="upload-section">
+            <select id="backgroundSelect" class="dropdown" onchange="selectBackground()">
+                <option value="">Select a Background</option>
+            </select>
+            <label class="upload-btn">
+                Upload Image
+                <input type="file" id="objectInput" accept="image/*" onchange="uploadObject()">
+            </label>
+        </div>
+
+        <!-- Canvas Container -->
+        <div class="canvas-container">
+            <canvas id="canvas" width="300" height="450"></canvas>
+        </div>
+
+        <!-- Buttons Section -->
+        <div class="buttons">
+            <button class="action-btn merge-btn" onclick="mergeImages()">Merge & Download</button>
+            <button class="action-btn clear-btn" onclick="clearCanvas()">Clear</button>
+        </div>
+    </div>
+
+    <script>
+        let canvas = new fabric.Canvas('canvas', { selection: false });
+        let background = null;
+        let objectImg = null;
+
+        function fetchBackgrounds() {
+            fetch('/get-backgrounds')
+                .then(response => response.json())
+                .then(images => {
+                    let select = document.getElementById("backgroundSelect");
+                    images.forEach(image => {
+                        let option = document.createElement("option");
+                        option.value = image;
+                        option.textContent = image;
+                        select.appendChild(option);
+                    });
+                });
+        }
+
+        function selectBackground() {
+            let filename = document.getElementById("backgroundSelect").value;
+            if (!filename) return;
+
+            let imageUrl = `/background/${filename}`;
+
+            fabric.Image.fromURL(imageUrl, function(img) {
+                if (background) canvas.remove(background);
+
+                let scaleX = canvas.width / img.width;
+                let scaleY = canvas.height / img.height;
+                let scale = Math.max(scaleX, scaleY);
+
+                img.set({
+                    left: 0,
+                    top: 0,
+                    scaleX: 1,
+                    scaleY: 1,
+                    hasControls: false,
+                    selectable: false
+                });
+
+                canvas.add(img);
+                canvas.sendToBack(img);
+                background = img;
+            });
+        }
+
+        function uploadObject() {
+            let fileInput = document.getElementById('objectInput');
+            let file = fileInput.files[0];
+
+            if (!file) return;
+
+            let formData = new FormData();
+            formData.append("object", file);
+
+            fetch('/upload', { method: 'POST', body: formData })
+                .then(response => response.json())
+                .then(data => {
+                    fabric.Image.fromURL(data.object, function(img) {
+                        if (objectImg) canvas.remove(objectImg);
+                        img.set({ left: 110, top: 270, scaleX: 0.1, scaleY: 0.1, hasControls: true, selectable: true });
+                        canvas.add(img);
+                        objectImg = img;
+                    });
+                });
+        }
+
+        function mergeImages() {
+            let mergedImage = canvas.toDataURL('image/png');
+            let link = document.createElement('a');
+            link.href = mergedImage;
+            link.download = 'merged_image.png';
+            link.click();
+        }
+
+        function clearCanvas() {
+            canvas.clear();
+            background = null;
+            objectImg = null;
+        }
+
+
+        window.onload = fetchBackgrounds;
+    </script>
+</body>
+</html>
